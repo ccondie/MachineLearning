@@ -2,50 +2,99 @@ from .supervised_learner import SupervisedLearner
 from .matrix import Matrix
 from random import uniform
 import math
-from .node import Node
+
+
+class Node(object):
+    def __init__(self, out=0):
+        self.uid = NeuralNetLearner.node_uid_count
+        NeuralNetLearner.node_uid_count += 1
+
+        self.net = 0
+        self.out = out
+        self.sigma = None
+        self.bias_weight = 1
 
 
 class NeuralNetLearner(SupervisedLearner):
+    node_uid_count = 0
+
     def __init__(self):
         self.LR = 0.1
+        self.hid_count = 2
+
+        # init in layer
+        self.in_lay = []
 
         # init hidden layer
         self.hid_lays = []
 
         # init out layer
-        self.out_lay = self.genTestOutputLayer()
+        self.out_lay = []
 
-        # fill the hidden layer
-        self.hid_lays.append(self.genTestHiddenLayer())
+        # init weightMap
+        self.wm = dict()
 
-    # creates a new list of "weights" representing a newly initialized hidden layer
+    def fillInputLayer(self, data):
+        layer = []
+        for val in data:
+            layer.append(Node(val))
+        return layer
+
     def genHiddenLayer(self, size):
         layer = []
         for i in range(size):
-            layer.append(Node(uniform(-0.1, 0.1)))
+            layer.append(Node())
+            self.node_uid_count += 1
         return layer
 
     def genTestHiddenLayer(self):
-        layer = [Node(1), Node(1)]
+        layer = [Node(), Node()]
         return layer
 
     def genOutputLayer(self, size):
         layer = []
         for i in range(size):
-            layer.append(Node(uniform(-0.1, 0.1)))
+            layer.append(Node())
         return layer
 
     def genTestOutputLayer(self):
-        layer = [Node(1)]
+        layer = [Node()]
         return layer
 
+    def buildWeightMap(self):
+        pass
+
     def train(self, features, labels):
-        # get the input set
-        inVals = features.row(0)
         target = labels.row(0)
 
+        # Create Nodes
+        self.in_lay = self.fillInputLayer(features.row(0))
+        self.hid_lays.append(self.genTestHiddenLayer())
+        self.out_lay = self.genTestOutputLayer()
+
+        # Build weight map
+        for in_node in self.in_lay:
+            for h_node in self.hid_lays[0]:
+                w_uid = ''.join([str(in_node.uid), "-", str(h_node.uid)])
+                self.wm[w_uid] = uniform(-0.1, 0.1)
+                self.wm[w_uid] = 1
+
+        for h_node in self.hid_lays[0]:
+            for o_node in self.out_lay:
+                w_uid = ''.join([str(h_node.uid), "-", str(o_node.uid)])
+                self.wm[w_uid] = uniform(-0.1, 0.1)
+                self.wm[w_uid] = 1
+
+        print("\tinput values: ", end=' ')
+        for node in self.in_lay:
+            print(node.out, end=' ')
+        print()
+
+        print("\tinitial weights: ")
+        for weightKey in self.wm:
+            print("\t\t" + str(weightKey) + " : " + str(self.wm[weightKey]))
+
         print("FORWARD PROPAGATING ...")
-        print("\tinput values: " + str(inVals))
 
         # calculate the error(net) of the hidden layer nodes
         print("Processing HIDDEN Layers")
@@ -53,10 +102,11 @@ class NeuralNetLearner(SupervisedLearner):
 
         # Calculate the net values of the hidden layers
         for node in self.hid_lays[cur_hl]:
-            for inVal in inVals:
-                node.net += node.weight * inVal
-            # handle the input bias
-            node.net += node.weight * 1
+            # for each node in the hidden layer
+            for in_node in self.in_lay:
+                # look up the weight between it and each input node
+                node.net += self.wm[''.join([str(in_node.uid), '-', str(node.uid)])] * in_node.out
+            node.net += 1 * node.bias_weight
 
         print("\thidden layer NET values: ", end='')
         for node in self.hid_lays[cur_hl]:
@@ -75,11 +125,9 @@ class NeuralNetLearner(SupervisedLearner):
         print("Processing Output Layers")
 
         # Calculate the net values of the output nodes
-        for node in self.out_lay:
+        for out_node in self.out_lay:
             for hid_node in self.hid_lays[-1]:
-                node.net += node.weight * hid_node.out
-            # handle bias
-            node.net += node.weight * 1
+
 
         print("\toutput layer NET values: ", end=' ')
         for node in self.out_lay:
