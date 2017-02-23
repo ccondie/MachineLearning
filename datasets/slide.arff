@@ -1,0 +1,13 @@
+@RELATION slide
+
+@ATTRIBUTE x1	{0,1}
+@ATTRIBUTE x2 	{0,1}
+@ATTRIBUTE out 	{0,1}
+
+@DATA
+0,0,1
+1,1,1
+0,1,0
+%
+%
+%
