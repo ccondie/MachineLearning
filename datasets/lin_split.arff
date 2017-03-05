@@ -1,0 +1,29 @@
+@RELATION lin_split
+
+@ATTRIBUTE x    continuous
+@ATTRIBUTE y 	continuous
+@ATTRIBUTE out 	{red,blue}
+
+@DATA
+1,2,red
+1,5,red
+2,4,red
+4,3,red
+4,7,red
+5,1,blue
+7,3,blue
+8,2,blue
+10,3,blue
+-15,-1,red
+-11,-2,red
+-12,-5,red
+-8,-1,red
+-5,-1,red
+-2,-2,blue
+-3,-4,blue
+-2,-8,blue
+-6,-6,blue
+-5,-10,blue
+%
+%
+%

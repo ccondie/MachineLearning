@@ -1,6 +1,6 @@
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 
-from .matrix import Matrix
+from matrix import Matrix
 import math
 
 # this is an abstract class
@@ -48,6 +48,7 @@ class SupervisedLearner:
 
         label_values_count = labels.value_count(0)
         if label_values_count == 0:
+            print('CONTINUOUS ACCURACY MEASURE')
             # label is continuous
             pred = []
             sse = 0.0
@@ -61,6 +62,7 @@ class SupervisedLearner:
             return math.sqrt(sse / features.rows)
 
         else:
+            print('NOMINCAL ACCURACY MEASURE')
             # label is nominal, so measure predictive accuracy
             if confusion:
                 confusion.set_size(label_values_count, label_values_count)
@@ -74,9 +76,11 @@ class SupervisedLearner:
                 if targ >= label_values_count:
                     raise Exception("The label is out of range")
                 self.predict(feat, prediction)
+
                 pred = int(prediction[0])
                 if confusion:
                     confusion.set(targ, pred, confusion.get(targ, pred)+1)
+
                 if pred == targ:
                     correct_count += 1
 
