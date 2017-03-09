@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function, unicode_liter
 from supervised_learner import SupervisedLearner
 from baseline_learner import BaselineLearner
 from neuralnet import NeuralNetLearner
+from decisiontree import DecisionTreeLearner
 from matrix import Matrix
 import random
 import argparse
@@ -26,7 +27,7 @@ class MLSystemManager:
             "baseline": BaselineLearner(),
             #"perceptron": PerceptronLearner(),
             "neuralnet": NeuralNetLearner(),
-            #"decisiontree": DecisionTreeLearner(),
+            "decisiontree": DecisionTreeLearner(),
             #"knn": InstanceBasedLearner()
         }
         if model in modelmap:
