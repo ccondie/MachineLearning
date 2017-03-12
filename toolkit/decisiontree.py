@@ -344,9 +344,7 @@ class DecisionTreeLearner(SupervisedLearner):
                     pruned_node_map = collect_branch_node_uuids(pruned_tree_root)
 
                     # delete a node at the current test index
-                    # del pruned_node_map[node_index]
                     remove_node_by_uuid(node_uuid, pruned_tree_root)
-                    # print('JUST PRUDED ... NODE COUNT: ' + str(len(collect_branch_node_uuids(pruned_tree_root))))
 
                     # test accuracy
                     pruned_accuracy = self.measure_accuracy(valid_set_instances, valid_set_labels, confusion=None,
@@ -354,14 +352,16 @@ class DecisionTreeLearner(SupervisedLearner):
 
                     # print('prune accuracy: ' + str(pruned_accuracy))
                     # if the new accuracy is better, keep this tree as the new current
-                    if pruned_accuracy > best_accuracy:
+                    if pruned_accuracy > current_best_accuracy:
                         print('PRUNING A NODE - new accuracy: ' + str(pruned_accuracy))
-                        best_pruned_root = copy.deepcopy(pruned_tree_root)
-                        best_accuracy = pruned_accuracy
+                        current_best_root = copy.deepcopy(pruned_tree_root)
+                        current_best_accuracy = pruned_accuracy
                         pruning = True
 
-                if True:
-                    pass
+                if pruning:
+                    best_pruned_root = current_best_root
+                    best_accuracy = current_best_accuracy
+
 
             # set the pruned tree as the DT's root node
             self.root_node = best_pruned_root
