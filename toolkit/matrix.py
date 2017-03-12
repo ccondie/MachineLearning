@@ -72,6 +72,18 @@ class Matrix:
         for i in range(matrix.rows - row_start):
             self.data.append(matrix.data[row_start + i][col_start:col_start + col_count])
 
+    def add_row(self, matrix, row_index, col_start, col_count):
+        """Appends a copy of the specified portion of a matrix to this matrix"""
+        if __debug__ and self.cols < col_count:
+            raise Exception("out of range")
+
+        if __debug__:
+            for col in range(self.cols):
+                if matrix.value_count(col_start + col) != self.value_count(col):
+                    raise Exception("incompatible relations")
+
+        self.data.append(matrix.data[row_index][col_start:col_start + col_count])
+
     def set_size(self, rows, cols):
         """Resize this matrix (and set all attributes to be continuous)"""
         self.data = [[0]*cols for row in range(rows)]
@@ -241,6 +253,10 @@ class Matrix:
                     v = self.get(j, i)
                     if v != self.MISSING:
                         self.set(j, i, (v - min_val)/(max_val - min_val))
+
+    def enum_to_str_access(self, row, col):
+        instance = self.row(row)
+        return self.enum_to_str[col][instance[col]]
 
     def print(self):
         print("@RELATION {}".format(self.dataset_name))

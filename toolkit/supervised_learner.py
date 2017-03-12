@@ -48,7 +48,7 @@ class SupervisedLearner:
 
         label_values_count = labels.value_count(0)
         if label_values_count == 0:
-            print('CONTINUOUS ACCURACY MEASURE')
+            # print('CONTINUOUS ACCURACY MEASURE')
             # label is continuous
             pred = []
             sse = 0.0
@@ -62,7 +62,7 @@ class SupervisedLearner:
             return math.sqrt(sse / features.rows)
 
         else:
-            print('NOMINCAL ACCURACY MEASURE')
+            # print('NOMINCAL ACCURACY MEASURE')
             # label is nominal, so measure predictive accuracy
             if confusion:
                 confusion.set_size(label_values_count, label_values_count)
