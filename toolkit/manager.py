@@ -4,6 +4,7 @@ from supervised_learner import SupervisedLearner
 from baseline_learner import BaselineLearner
 from neuralnet import NeuralNetLearner
 from decisiontree import DecisionTreeLearner
+from knn import InstanceBasedLearner
 from matrix import Matrix
 import random
 import argparse
@@ -28,7 +29,7 @@ class MLSystemManager:
             #"perceptron": PerceptronLearner(),
             "neuralnet": NeuralNetLearner(),
             "decisiontree": DecisionTreeLearner(),
-            #"knn": InstanceBasedLearner()
+            "knn": InstanceBasedLearner()
         }
         if model in modelmap:
             return modelmap[model]
