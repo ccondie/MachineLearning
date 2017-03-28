@@ -67,19 +67,19 @@
 @attribute A1		{b,a}
 @attribute A2		REAL
 @attribute A3		REAL
-@attribute A4		{u, y, l, t}
-@attribute A5		{g, p, gg}
-@attribute A6		{c, d, cc, i, j, k, m, r, q, w, x, e, aa, ff}
-@attribute A7		{v, h, bb, j, n, z, dd, ff, o}
+@attribute A4		{u,y,l,t}
+@attribute A5		{g,p,gg}
+@attribute A6		{c,d,cc,i,j,k,m,r,q,w,x,e,aa,ff}
+@attribute A7		{v,h,bb,j,n,z,dd,ff,o}
 @attribute A8		REAL
 @attribute A9		{t,f}
 @attribute A10		{t,f}
 @attribute A11		REAL
 @attribute A12		{t,f}
-@attribute A13		{g, p, s}
+@attribute A13		{g,p,s}
 @attribute A14		REAL
 @attribute A15		REAL
-@attribute class	{+, -}
+@attribute class	{+,-}
 
 @data
 %

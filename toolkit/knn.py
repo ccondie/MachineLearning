@@ -6,12 +6,11 @@ from matrix import Matrix
 
 class InstanceBasedLearner(SupervisedLearner):
     def __init__(self):
-        self.weightFlag = False
-        self.regressFlag = False
-        self.k = 3
+        self.weightFlag = True
+        self.k = 15
         self.instances = None
         self.classes = None
-        self.predict_count = 0
+        self.predict_count = 1
         self.train_max_size = 2000
 
     def train(self, instances, classes):
@@ -31,7 +30,10 @@ class InstanceBasedLearner(SupervisedLearner):
             self.classes.add_row(classes, i, 0, classes.cols)
 
     def predict(self, instance, classif):
-        print(self.predict_count)
+        if self.predict_count % 100 == 0:
+            print(self.predict_count, end=', ', flush=True)
+        if self.predict_count % 1000 == 0:
+            print()
         self.predict_count += 1
         # distance_map[train_index] = distance_value
         distance_map = dict()
@@ -44,12 +46,34 @@ class InstanceBasedLearner(SupervisedLearner):
 
         if self.classes.value_count(0) == 0:
             # classification is continuous
+            reg_members = list()
+            for k in range(self.k):
+                dist_value = distance_sorted[k][1]
+                cont_value = self.classes.row(distance_sorted[k][0])[0]
+                # print("dist: " + str(dist_value) + " - point: " + str(cont_value), flush=True)
+                reg_members.append([cont_value, dist_value])
+
+            numerator = 0
+            denominator = 0
+            if self.weightFlag:
+                for reg_member in reg_members:
+                    numerator += reg_member[0]/math.pow(reg_member[1],2)
+                    denominator += 1/math.pow(reg_member[1],2)
+            else:
+                for reg_member in reg_members:
+                    numerator += reg_member[0]
+                    denominator += 1
+
+            reg_value = numerator / denominator
+            # print("Prediction: " + str(reg_value))
+            # print()
 
             # set the "return" value
             if len(classif) == 0:
-                classif.append(0)
+                classif.append(reg_value)
             else:
-                classif[0] = 0
+                classif[0] = reg_value
+
         else:
             # classification is nominal
             vote_map = dict()
@@ -58,11 +82,18 @@ class InstanceBasedLearner(SupervisedLearner):
                 # vote_map[nominal_value] = vote_count
                 if self.weightFlag:
                     # weighted
-                    nominal_value = self.classes.row(distance_sorted[vote_index][0])
+                    nominal_value = self.classes.row(distance_sorted[vote_index][0])[0]
+                    denom = math.pow(distance_sorted[vote_index][1], 2)
                     if nominal_value in vote_map:
-                        vote_map[nominal_value] += 1 / math.pow(distance_sorted[vote_index][1], 2)
+                        if denom == 0:
+                            vote_map[nominal_value] += 1 / 0.0000000000000000000000000000000001
+                        else:
+                            vote_map[nominal_value] += 1 / denom
                     else:
-                        vote_map[nominal_value] = 1 / math.pow(distance_sorted[vote_index][1], 2)
+                        if denom == 0:
+                            vote_map[nominal_value] = 1 / 0.0000000000000000000000000000000001
+                        else:
+                            vote_map[nominal_value] = 1 / denom
                 else:
                     # unweighted
                     nominal_value = self.classes.row(distance_sorted[vote_index][0])[0]
@@ -72,6 +103,7 @@ class InstanceBasedLearner(SupervisedLearner):
                         vote_map[nominal_value] = 1
             # sort the votes and return the nominal value with the most votes
             vote_sorted = sorted(vote_map.items(), key=operator.itemgetter(1))
+
             # set the "return" value
             if len(classif) == 0:
                 classif.append(vote_sorted[-1][0])

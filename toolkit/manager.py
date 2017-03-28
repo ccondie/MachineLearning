@@ -101,14 +101,18 @@ class MLSystemManager:
             elapsed_time = time.time() - start_time
             print("Time to train (in seconds): {}".format(elapsed_time))
 
-            train_accuracy = learner.measure_accuracy(features, labels)
-            print("Training set accuracy: {}".format(train_accuracy))
+            # train_accuracy = learner.measure_accuracy(features, labels)
+            # print("Training set accuracy: {}".format(train_accuracy))
 
             test_features = Matrix(test_data, 0, 0, test_data.rows, test_data.cols-1)
             test_labels = Matrix(test_data, 0, test_data.cols-1, test_data.rows, 1)
             confusion = Matrix()
+            start_time = time.time()
             test_accuracy = learner.measure_accuracy(test_features, test_labels, confusion)
+            elapsed_time = time.time() - start_time
+            print()
             print("Test set accuracy: {}".format(test_accuracy))
+            print("Time total: " + str(elapsed_time))
 
             if print_confusion_matrix:
                 print("\nConfusion matrix: (Row=target value, Col=predicted value)")
