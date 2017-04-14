@@ -148,10 +148,6 @@ class NeuralNetLearner(SupervisedLearner):
         self.hid_lays.append(self.genHiddenLayer(self.hid_count))
         self.out_lay = self.genOutputLayer(labels)
 
-        if self.debug:
-            print('START TRAIN')
-            print('------------------------------------------------------------------------------------------')
-
         # Build weight map - the nodes in place are dummies that will develop as the program runs
         # the weights established here will persist through the program's training
         for in_node in self.in_lay:
@@ -168,20 +164,24 @@ class NeuralNetLearner(SupervisedLearner):
 
         epoch_count = 0
         learning = True
-        delta_accur = 1.0
         prev_accur = 0
+        epochs_without_improvemnt = 0
 
-        # while learning:
-        while epoch_count < 1000:
+        while epoch_count < 100:
             epoch_count += 1
 
+            # ******************************************************************************************
+            # Setup Step
+            # ******************************************************************************************
             # randomly split the features into train and validation sets
             features.shuffle(labels)
             train_set = []
             train_set_targets = []
+
             valid_set = []
             valid_set_targets = []
 
+            # allot the train and valid sets
             for feat_index in range(features.rows):
                 if feat_index < math.floor(features.rows * self.train_percent):
                     train_set.append(features.row(feat_index))
@@ -190,30 +190,25 @@ class NeuralNetLearner(SupervisedLearner):
                     valid_set.append(features.row(feat_index))
                     valid_set_targets.append(labels.row(feat_index))
 
-            if self.debug:
-                print("train set... ")
-                for i in range(len(train_set)):
-                    print('\t' + str(train_set[i]) + ' ---> ' + str(train_set_targets[i]))
-
-                print("valid set...")
-                for i in range(len(valid_set)):
-                    print('\t' + str(valid_set[i]) + ' ---> ' + str(valid_set_targets[i]))
-                print('\n\n')
-
-                # adjust weights using the train set
+            # ******************************************************************************************
+            # Training Step
+            # ******************************************************************************************
+            # adjust weights using the train set
             for instance_index in range(len(train_set)):
                 self.propagate(train_set[instance_index], train_set_targets[instance_index])
 
-            # check validity using validation set
+            # calculate the mse of the
+            mse_train = self.net_mse()
+
+            # ******************************************************************************************
+            # Validation Step
+            # ******************************************************************************************
             correct = 0
-            incorrect = 0
-
-            if self.debug:
-                print('STARTING VALIDATION CHECK')
-
+            vs_count = 0
             for instance_index in range(len(valid_set)):
+                vs_count += 1
                 instance_prediction = []
-                self.predict(valid_set[instance_index],instance_prediction)
+                self.predict(valid_set[instance_index], instance_prediction)
 
                 if self.debug:
                     print('expect: ' + str(valid_set_targets[instance_index]) + '\t', end='')
@@ -221,24 +216,10 @@ class NeuralNetLearner(SupervisedLearner):
 
                 if instance_prediction == valid_set_targets[instance_index]:
                     correct += 1
-                else:
-                    incorrect += 1
+            accuracy = correct / vs_count
 
-            accuracy = correct / (correct + incorrect)
-            delta_accur = abs(prev_accur - accuracy)
-            prev_accur = accuracy
-
-            if self.debug:
-                print('CORRECT: ' + str(correct))
-                print('INCORRECT: ' + str(incorrect))
-                print('ACCURACY: ' + str(accuracy))
-                print('CHANGE IN ACCURACY: ' + str(delta_accur))
-
-            if accuracy > .80:
+            if epochs_without_improvemnt > 10:
                 learning = False
-
-        self.debug = True
-        self.print_status()
 
     def calc_output(self, in_layer, layer):
         # calculate net values
@@ -259,18 +240,15 @@ class NeuralNetLearner(SupervisedLearner):
 
         # Calculate the net values of the hidden layers
         self.calc_output(self.in_lay, self.hid_lays[cur_hl])
+
         # Calculate the net values of the output nodes
         self.calc_output(self.hid_lays[-1], self.out_lay)
-
-        self.print_status()
 
         # Calculate sigma and update weights for the output layer
         self.updateWeights_out(self.hid_lays[-1], self.out_lay, target[0])
 
         # Calculate sigma and update weights for the hidden layer
         self.updateWeights(self.in_lay, self.hid_lays[0], self.out_lay)
-
-        self.print_status()
 
     def predict(self, features, labels):
         self.fillInputLayer(features)
@@ -290,3 +268,12 @@ class NeuralNetLearner(SupervisedLearner):
             labels.append(prediction)
         else:
             labels[0] = prediction
+
+    def net_mse(self):
+        # calculates the mse of the neural net as it is now
+        error_sum = 0
+        node_tally = 0
+        for node in self.out_lay:
+            error_sum += node.sigma ** 2
+            node_tally += 1
+        return error_sum / node_tally
