@@ -1,8 +1,10 @@
-from supervised_learner import SupervisedLearner
-from matrix import Matrix
-from random import uniform
-from random import shuffle
 import math
+from datetime import datetime
+from random import uniform
+import sys
+import copy
+
+from supervised_learner import SupervisedLearner
 
 
 class Node(object):
@@ -15,6 +17,7 @@ class Node(object):
         self.out = out
         self.sigma = 0
         self.bias_weight = 1
+        self.bias_last_delta = 0
         # used to specify target for an output node using categorical data
         self.target = 0
 
@@ -24,14 +27,57 @@ class Node(object):
             self.bias_weight) + '\ttarget: ' + '{:.10f}'.format(self.target))
 
 
+def gen_hidden_layer(size):
+    layer = []
+    for i in range(size):
+        layer.append(Node())
+    return layer
+
+
+def gen_output_layer(labels):
+    layer = []
+    for i in range(labels.value_count(0)):
+        dum_node = Node()
+        dum_node.target = i
+        layer.append(dum_node)
+
+    return layer
+
+
+def gen_input_layer(size):
+    layer = []
+    for _ in size:
+        layer.append(Node())
+    return layer
+
+
+def update_sigma_out(j, target):
+    for j_node in j:
+        if target == j_node.target:
+            node_target = 1
+        else:
+            node_target = 0
+
+        # calculate the output node's new sigma
+        j_node.sigma = (node_target - j_node.out) * j_node.out * (1 - j_node.out)
+
+
+def gen_w_uid(node1, node2):
+    return ''.join([str(node1.uid), '-', str(node2.uid)])
+
+
 class NeuralNetLearner(SupervisedLearner):
     def __init__(self):
         self.debug = False
+
         self.LR = 0.1
+
         # number of nodes in the hidden layer
-        self.hid_count = 8
+        self.hid_count = 20
         # train/validate split
         self.train_percent = 0.75
+        self.momentum = False
+        self.momentumCo = 0.9
 
         # init in layer
         self.in_lay = []
@@ -44,82 +90,71 @@ class NeuralNetLearner(SupervisedLearner):
 
         # init weightMap
         self.wm = dict()
+        self.last_delta = dict()
 
-    def fillInputLayer(self, instance):
+    def fill_input_layer(self, instance):
         for i in range(len(instance)):
             self.in_lay[i].out = instance[i]
 
-    def genInputLayer(self, size):
-        layer = []
-        for i in size:
-            layer.append(Node())
-        return layer
-
-    def genHiddenLayer(self, size):
-        layer = []
-        for i in range(size):
-            layer.append(Node())
-        return layer
-
-    def genOutputLayer(self, labels):
-        layer = []
-        for i in range(labels.value_count(0)):
-            dumNode = Node()
-            dumNode.target = i
-            layer.append(dumNode)
-
-        return layer
-
+    # calculate the error on the output layer given an expected target
     # Calculates the new sigma values for output layer j and updates the weights between i and j
     # param i: list of nodes in the preceding node layer
     # param j: list of nodes in the layer to update sigma
-    def updateWeights_out(self, i, j, target):
+    def update_weights_out(self, i, j, target):
+        # update the sigma values in the forward layer
+        update_sigma_out(j, target)
+
         for j_node in j:
-            node_target = None
-            if target == j_node.target:
-                node_target = 1
-            else:
-                node_target = 0
-
-            # calculate the output node's new sigma
-            j_node.sigma = (node_target - j_node.out) * j_node.out * (1 - j_node.out)
-
             # use that sigma to update the weights feeding into this output node
             for i_node in i:
-                w_uid = self.gen_w_uid(i_node, j_node)
+                w_uid = gen_w_uid(i_node, j_node)
                 delta_w = self.LR * j_node.sigma * i_node.out
-                self.wm[w_uid] += delta_w
+                if self.momentum:
+                    self.wm[w_uid] += delta_w + self.momentumCo * self.last_delta[w_uid]
+                else:
+                    self.wm[w_uid] += delta_w
+                self.last_delta[w_uid] = delta_w
 
             # update the output node's bias weight
             delta_w = self.LR * j_node.sigma * 1
-            j_node.bias_weight += delta_w
+            if self.momentum:
+                j_node.bias_weight += delta_w + self.momentumCo * j_node.bias_last_delta
+            else:
+                j_node.bias_weight += delta_w
+            j_node.bias_last_delta = delta_w
+
 
     # Calculates the new sigma values for j and updates the weights between i and j
     # param i: list of nodes in the preceding node layer
     # param j: list of nodes in the layer to update sigma
     # param k: list of nodes in the following node layer
-    def updateWeights(self, i, j, k):
+    def update_weights(self, i, j, k):
         for j_node in j:
-            sigSum = 0
+            sig_sum = 0
             # use the nodes in the layer ahead of this node to calculate the sigma
             for k_node in k:
-                w_uid = self.gen_w_uid(j_node, k_node)
-                sigSum += self.wm[w_uid] * k_node.sigma
+                w_uid = gen_w_uid(j_node, k_node)
+                sig_sum += self.wm[w_uid] * k_node.sigma
             net_prime = j_node.out * (1 - j_node.out)
-            j_node.sigma = net_prime * sigSum
+            j_node.sigma = net_prime * sig_sum
 
             # use that sigma to update the weights feeding into this hidden layer node
             for i_node in i:
-                w_delta = self.LR * j_node.sigma * i_node.out
-                w_uid = self.gen_w_uid(i_node, j_node)
-                self.wm[w_uid] += w_delta
+                delta_w = self.LR * j_node.sigma * i_node.out
+                w_uid = gen_w_uid(i_node, j_node)
+                if self.momentum:
+                    self.wm[w_uid] += delta_w + self.momentumCo * self.last_delta[w_uid]
+                else:
+                    self.wm[w_uid] += delta_w
+                self.last_delta[w_uid] = delta_w
 
             # update the hidden nodes bias weight
             delta_w = self.LR * j_node.sigma * 1
-            j_node.bias_weight += delta_w
-
-    def gen_w_uid(self, node1, node2):
-        return ''.join([str(node1.uid), '-', str(node2.uid)])
+            if self.momentum:
+                j_node.bias_weight += delta_w + self.momentumCo * j_node.bias_last_delta
+            else:
+                j_node.bias_weight += delta_w
+            j_node.bias_last_delta = delta_w
 
     def print_status(self):
         if self.debug:
@@ -142,32 +177,50 @@ class NeuralNetLearner(SupervisedLearner):
             print('\n\n\n')
 
     def train(self, features, labels):
+        out_file = open('{:%Y-%m-%d_%H-%M-%S}'.format(datetime.now()) + str('.csv'), 'a')
+        out_file.write('epoch,train_mse,vs_mse,vs_accuracy\n')
+
         # Create Nodes
         # fill the input layer with the first entry in the instances, this will be overwritten
-        self.in_lay = self.genInputLayer(features.row(0))
-        self.hid_lays.append(self.genHiddenLayer(self.hid_count))
-        self.out_lay = self.genOutputLayer(labels)
+        self.in_lay = gen_input_layer(features.row(0))
+        self.hid_lays.append(gen_hidden_layer(self.hid_count))
+        self.out_lay = gen_output_layer(labels)
 
         # Build weight map - the nodes in place are dummies that will develop as the program runs
         # the weights established here will persist through the program's training
         for in_node in self.in_lay:
             for h_node in self.hid_lays[0]:
-                w_uid = self.gen_w_uid(in_node, h_node)
+                w_uid = gen_w_uid(in_node, h_node)
                 self.wm[w_uid] = uniform(-0.1, 0.1)
+                self.last_delta[w_uid] = 0
 
         for h_node in self.hid_lays[0]:
             for o_node in self.out_lay:
-                w_uid = self.gen_w_uid(h_node, o_node)
+                w_uid = gen_w_uid(h_node, o_node)
                 self.wm[w_uid] = uniform(-0.1, 0.1)
+                self.last_delta[w_uid] = 0
 
-        self.print_status()
+        # ******************************************************************************************
+        # Start Training
+        # ******************************************************************************************
+        learning = True
 
         epoch_count = 0
-        learning = True
-        prev_accur = 0
-        epochs_without_improvemnt = 0
+        epochs_without_improvement = 0
 
+        best_vs_accuracy = 0
+        last_vs_accuracy = 0
+
+        best_vs_mse = sys.maxsize
+        last_vs_mse = sys.maxsize
+
+        best_mse = sys.maxsize
+        last_mse = sys.maxsize
+
+        # while learning:
         while epoch_count < 100:
+
+            print(epoch_count)
             epoch_count += 1
 
             # ******************************************************************************************
@@ -194,39 +247,63 @@ class NeuralNetLearner(SupervisedLearner):
             # Training Step
             # ******************************************************************************************
             # adjust weights using the train set
+            sse = 0
             for instance_index in range(len(train_set)):
                 self.propagate(train_set[instance_index], train_set_targets[instance_index])
-
+                sse += self.net_mse()
             # calculate the mse of the
-            mse_train = self.net_mse()
+            train_mse = sse / len(train_set)
+
+            out_file.write(str(epoch_count) + ',' + str(train_mse) + str(','))
 
             # ******************************************************************************************
             # Validation Step
             # ******************************************************************************************
             correct = 0
             vs_count = 0
+            vs_sse = 0
+
+            # test the validation instances
             for instance_index in range(len(valid_set)):
                 vs_count += 1
                 instance_prediction = []
-                self.predict(valid_set[instance_index], instance_prediction)
-
-                if self.debug:
-                    print('expect: ' + str(valid_set_targets[instance_index]) + '\t', end='')
-                    print('actual: ' + str(instance_prediction[0]))
+                self.vs_predict(valid_set[instance_index], instance_prediction, valid_set_targets[instance_index])
+                vs_sse += self.net_mse()
 
                 if instance_prediction == valid_set_targets[instance_index]:
                     correct += 1
-            accuracy = correct / vs_count
 
-            if epochs_without_improvemnt > 10:
+            vs_mse = vs_sse / len(valid_set)
+            vs_accuracy = correct / vs_count
+
+            # vs mse termination
+            if vs_mse < last_vs_mse:
+                if vs_mse < best_vs_mse:
+                    best_vs_mse = vs_mse
+                    epochs_without_improvement = 0
+                    # assign the "best" hidden layer set
+                    best_hl = copy.deepcopy(self.hid_lays)
+                    best_out = copy.deepcopy(self.out_lay)
+            else:
+                epochs_without_improvement += 1
+            last_vs_mse = vs_mse
+
+            out_file.write(str(vs_mse) + ',' + str(vs_accuracy) + '\n')
+
+            if epochs_without_improvement > 100:
                 learning = False
+
+        # self.hid_lays = best_hl
+        # self.out_lay = best_out
+
+        out_file.close()
 
     def calc_output(self, in_layer, layer):
         # calculate net values
         for node in layer:
             node.net = 0
             for in_node in in_layer:
-                node.net += self.wm[self.gen_w_uid(in_node, node)] * in_node.out
+                node.net += self.wm[gen_w_uid(in_node, node)] * in_node.out
             node.net += 1 * node.bias_weight
 
         for node in layer:
@@ -234,7 +311,7 @@ class NeuralNetLearner(SupervisedLearner):
 
     def propagate(self, instance, target):
         # load the instance into the input nodes
-        self.fillInputLayer(instance)
+        self.fill_input_layer(instance)
 
         cur_hl = 0
 
@@ -245,16 +322,36 @@ class NeuralNetLearner(SupervisedLearner):
         self.calc_output(self.hid_lays[-1], self.out_lay)
 
         # Calculate sigma and update weights for the output layer
-        self.updateWeights_out(self.hid_lays[-1], self.out_lay, target[0])
+        self.update_weights_out(self.hid_lays[-1], self.out_lay, target[0])
 
         # Calculate sigma and update weights for the hidden layer
-        self.updateWeights(self.in_lay, self.hid_lays[0], self.out_lay)
+        self.update_weights(self.in_lay, self.hid_lays[0], self.out_lay)
 
     def predict(self, features, labels):
-        self.fillInputLayer(features)
+        self.fill_input_layer(features)
 
         self.calc_output(self.in_lay, self.hid_lays[0])
         self.calc_output(self.hid_lays[-1], self.out_lay)
+
+        prediction = -1
+        highest = 0
+
+        for node in self.out_lay:
+            if node.out > highest:
+                highest = node.out
+                prediction = node.target
+
+        if len(labels) == 0:
+            labels.append(prediction)
+        else:
+            labels[0] = prediction
+
+    def vs_predict(self, features, labels, expected):
+        self.fill_input_layer(features)
+
+        self.calc_output(self.in_lay, self.hid_lays[0])
+        self.calc_output(self.hid_lays[-1], self.out_lay)
+        update_sigma_out(self.out_lay, expected)
 
         prediction = -1
         highest = 0
