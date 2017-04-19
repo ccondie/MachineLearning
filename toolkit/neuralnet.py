@@ -1,6 +1,7 @@
 import math
 from datetime import datetime
 from random import uniform
+from random import shuffle
 import sys
 import copy
 
@@ -20,11 +21,6 @@ class Node(object):
         self.bias_last_delta = 0
         # used to specify target for an output node using categorical data
         self.target = 0
-
-    def print(self):
-        print('\t' + str(self.uid) + '\tnet: ' + '{:.10f}'.format(self.net) + '\tout: ' + '{:.10f}'.format(
-            self.out) + '\tsigma: ' + '{:.10f}'.format(self.sigma) + '\tbias_weight: ' + '{:.10f}'.format(
-            self.bias_weight) + '\ttarget: ' + '{:.10f}'.format(self.target))
 
 
 def gen_hidden_layer(size):
@@ -70,12 +66,13 @@ class NeuralNetLearner(SupervisedLearner):
     def __init__(self):
         self.debug = False
 
-        self.LR = 0.1
+        self.LR = 0.3
 
         # number of nodes in the hidden layer
         self.hid_count = 20
         # train/validate split
         self.train_percent = 0.75
+
         self.momentum = False
         self.momentumCo = 0.9
 
@@ -123,7 +120,6 @@ class NeuralNetLearner(SupervisedLearner):
                 j_node.bias_weight += delta_w
             j_node.bias_last_delta = delta_w
 
-
     # Calculates the new sigma values for j and updates the weights between i and j
     # param i: list of nodes in the preceding node layer
     # param j: list of nodes in the layer to update sigma
@@ -156,27 +152,10 @@ class NeuralNetLearner(SupervisedLearner):
                 j_node.bias_weight += delta_w
             j_node.bias_last_delta = delta_w
 
-    def print_status(self):
-        if self.debug:
-            print('INPUT LAYER Nodes: ')
-            for node in self.in_lay:
-                node.print()
+    def train(self, features, labels, lr=None):
+        if lr is not None:
+            self.LR = lr
 
-            print('HIDDEN LAYER Nodes: ')
-            for layer in self.hid_lays:
-                for node in layer:
-                    node.print()
-
-            print('OUTPUT LAYER Nodes: ')
-            for node in self.out_lay:
-                node.print()
-
-            print('WEIGHTS: ')
-            for key in self.wm:
-                print(str(key) + ': ' + str(self.wm[key]))
-            print('\n\n\n')
-
-    def train(self, features, labels):
         out_file = open('{:%Y-%m-%d_%H-%M-%S}'.format(datetime.now()) + str('.csv'), 'a')
         out_file.write('epoch,train_mse,vs_mse,vs_accuracy\n')
 
@@ -201,6 +180,30 @@ class NeuralNetLearner(SupervisedLearner):
                 self.last_delta[w_uid] = 0
 
         # ******************************************************************************************
+        # Split out VS
+        # ******************************************************************************************
+        # randomly split the features into train and validation sets
+        features.shuffle(labels)
+        train_set = []
+        train_set_targets = []
+        train_order = []
+
+        valid_set = []
+        valid_set_targets = []
+
+        # allot the train and valid sets
+        for feat_index in range(features.rows):
+            if feat_index < math.floor(features.rows * self.train_percent):
+                train_set.append(features.row(feat_index))
+                train_set_targets.append(labels.row(feat_index))
+            else:
+                valid_set.append(features.row(feat_index))
+                valid_set_targets.append(labels.row(feat_index))
+
+        for i in range(len(train_set)):
+            train_order.append(i)
+
+        # ******************************************************************************************
         # Start Training
         # ******************************************************************************************
         learning = True
@@ -217,42 +220,31 @@ class NeuralNetLearner(SupervisedLearner):
         best_mse = sys.maxsize
         last_mse = sys.maxsize
 
+        best_at_epoch = 0
+        best_hl = []
+        best_out = []
+        best_weights = []
+
         # while learning:
-        while epoch_count < 100:
+        while epoch_count < 200:
 
-            print(epoch_count)
-            epoch_count += 1
+            print(epoch_count, end=' - ', flush=True)
 
             # ******************************************************************************************
-            # Setup Step
+            # Shuffle the Training Set
             # ******************************************************************************************
-            # randomly split the features into train and validation sets
-            features.shuffle(labels)
-            train_set = []
-            train_set_targets = []
-
-            valid_set = []
-            valid_set_targets = []
-
-            # allot the train and valid sets
-            for feat_index in range(features.rows):
-                if feat_index < math.floor(features.rows * self.train_percent):
-                    train_set.append(features.row(feat_index))
-                    train_set_targets.append(labels.row(feat_index))
-                else:
-                    valid_set.append(features.row(feat_index))
-                    valid_set_targets.append(labels.row(feat_index))
+            shuffle(train_order)
 
             # ******************************************************************************************
             # Training Step
             # ******************************************************************************************
             # adjust weights using the train set
             sse = 0
-            for instance_index in range(len(train_set)):
+            for instance_index in train_order:
                 self.propagate(train_set[instance_index], train_set_targets[instance_index])
                 sse += self.net_mse()
-            # calculate the mse of the
             train_mse = sse / len(train_set)
+            # train_mse = self.net_mse()
 
             out_file.write(str(epoch_count) + ',' + str(train_mse) + str(','))
 
@@ -268,35 +260,69 @@ class NeuralNetLearner(SupervisedLearner):
                 vs_count += 1
                 instance_prediction = []
                 self.vs_predict(valid_set[instance_index], instance_prediction, valid_set_targets[instance_index])
-                vs_sse += self.net_mse()
+                # vs_sse += self.net_mse()
 
                 if instance_prediction == valid_set_targets[instance_index]:
                     correct += 1
 
-            vs_mse = vs_sse / len(valid_set)
+            # vs_mse = vs_sse / len(valid_set)
+            vs_mse = self.net_mse()
             vs_accuracy = correct / vs_count
 
             # vs mse termination
-            if vs_mse < last_vs_mse:
+            print(str(train_mse) + ' - ' + str(vs_mse) + ' - ' + str(vs_accuracy))
+            if epoch_count > 10:
                 if vs_mse < best_vs_mse:
+                    print('BEST FOUND')
                     best_vs_mse = vs_mse
+                    best_at_epoch = epoch_count
                     epochs_without_improvement = 0
                     # assign the "best" hidden layer set
                     best_hl = copy.deepcopy(self.hid_lays)
                     best_out = copy.deepcopy(self.out_lay)
-            else:
-                epochs_without_improvement += 1
-            last_vs_mse = vs_mse
+                    best_weights = copy.deepcopy(self.wm)
+                else:
+                    epochs_without_improvement += 1
+
+            # # mse termination
+            # print(str(train_mse) +' - ' + str(vs_mse) + ' - ' + str(vs_accuracy))
+            # if train_mse < last_mse:
+            #     if train_mse < best_mse:
+            #         best_mse = train_mse
+            #         best_at_epoch = epoch_count
+            #         epochs_without_improvement = 0
+            #         # assign the "best" hidden layer set
+            #         best_hl = copy.deepcopy(self.hid_lays)
+            #         best_out = copy.deepcopy(self.out_lay)
+            # else:
+            #     epochs_without_improvement += 1
+            #
+            # last_mse = train_mse
+
+            # # vs accuracy termination
+            # if vs_accuracy > last_vs_accuracy:
+            #     if vs_accuracy > best_vs_accuracy:
+            #         best_vs_accuracy = vs_accuracy
+            #         epochs_without_improvement = 0
+            #         # assign the "best" hidden layer set
+            #         best_hl = copy.deepcopy(self.hid_lays)
+            #         best_out = copy.deepcopy(self.out_lay)
+            # else:
+            #     epochs_without_improvement += 1
+            # last_vs_accuracy = vs_accuracy
 
             out_file.write(str(vs_mse) + ',' + str(vs_accuracy) + '\n')
+            epoch_count += 1
 
-            if epochs_without_improvement > 100:
+            if epochs_without_improvement > 10:
                 learning = False
 
         # self.hid_lays = best_hl
         # self.out_lay = best_out
+        # self.wm = best_weights
 
         out_file.close()
+        print('Best Epoch at: ' + str(best_at_epoch))
 
     def calc_output(self, in_layer, layer):
         # calculate net values
