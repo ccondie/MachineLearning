@@ -1,5 +1,7 @@
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 
+from datetime import datetime
+
 from supervised_learner import SupervisedLearner
 from baseline_learner import BaselineLearner
 from neuralnet import NeuralNetLearner
@@ -12,7 +14,6 @@ import time
 
 
 class MLSystemManager:
-
     def get_learner(self, model):
         """
         Get an instance of a learner for the given model name.
@@ -26,7 +27,7 @@ class MLSystemManager:
         """
         modelmap = {
             "baseline": BaselineLearner(),
-            #"perceptron": PerceptronLearner(),
+            # "perceptron": PerceptronLearner(),
             "neuralnet": NeuralNetLearner(),
             "decisiontree": DecisionTreeLearner(),
             "knn": InstanceBasedLearner()
@@ -45,7 +46,7 @@ class MLSystemManager:
         eval_parameter = args.E[1] if len(args.E) > 1 else None
         print_confusion_matrix = args.verbose
         normalize = args.normalize
-        random.seed(args.seed) # Use a seed for deterministic results, if provided (makes debugging easier)
+        random.seed(args.seed)  # Use a seed for deterministic results, if provided (makes debugging easier)
 
         # load the model
         learner = self.get_learner(learner_name)
@@ -65,61 +66,6 @@ class MLSystemManager:
               "Learning algorithm: {}\n"
               "Evaluation method: {}\n".format(file_name, data.rows, data.cols, learner_name, eval_method))
 
-        # if eval_method == "training":
-        #
-        #     print("Calculating accuracy on training set...")
-        #
-        #     features = Matrix(data, 0, 0, data.rows, data.cols-1)
-        #     labels = Matrix(data, 0, data.cols-1, data.rows, 1)
-        #     confusion = Matrix()
-        #     start_time = time.time()
-        #     learner.train(features, labels)
-        #     elapsed_time = time.time() - start_time
-        #     print("Time to train (in seconds): {}".format(elapsed_time))
-        #     accuracy = learner.measure_accuracy(features, labels, confusion)
-        #     print("Training set accuracy: " + str(accuracy))
-        #
-        #     if print_confusion_matrix:
-        #         print("\nConfusion matrix: (Row=target value, Col=predicted value)")
-        #         confusion.print()
-        #         print("")
-        #
-        # elif eval_method == "static":
-        #
-        #     print("Calculating accuracy on separate test set...")
-        #
-        #     test_data = Matrix(arff=eval_parameter)
-        #     if normalize:
-        #         test_data.normalize()
-        #
-        #     print("Test set name: {}".format(eval_parameter))
-        #     print("Number of test instances: {}".format(test_data.rows))
-        #     features = Matrix(data, 0, 0, data.rows, data.cols-1)
-        #     labels = Matrix(data, 0, data.cols-1, data.rows, 1)
-        #
-        #     start_time = time.time()
-        #     learner.train(features, labels)
-        #     elapsed_time = time.time() - start_time
-        #     print("Time to train (in seconds): {}".format(elapsed_time))
-        #
-        #     # train_accuracy = learner.measure_accuracy(features, labels)
-        #     # print("Training set accuracy: {}".format(train_accuracy))
-        #
-        #     test_features = Matrix(test_data, 0, 0, test_data.rows, test_data.cols-1)
-        #     test_labels = Matrix(test_data, 0, test_data.cols-1, test_data.rows, 1)
-        #     confusion = Matrix()
-        #     start_time = time.time()
-        #     test_accuracy = learner.measure_accuracy(test_features, test_labels, confusion)
-        #     elapsed_time = time.time() - start_time
-        #     print()
-        #     print("Test set accuracy: {}".format(test_accuracy))
-        #     print("Time total: " + str(elapsed_time))
-        #
-        #     if print_confusion_matrix:
-        #         print("\nConfusion matrix: (Row=target value, Col=predicted value)")
-        #         confusion.print()
-        #         print("")
-
         if eval_method == "random":
 
             print("Calculating accuracy on a random hold-out set...")
@@ -129,86 +75,67 @@ class MLSystemManager:
             # print("Percentage used for training: {}".format(train_percent))
             # print("Percentage used for testing: {}".format(1 - train_percent))
 
-            # learning_rate = 0.1
-            # for i in range(5):
-            # print('test_iteration: ' + str(i))
+            output_file = open('learningRate_{:%Y-%m-%d_%H-%M-%S}.csv'.format(datetime.now()), 'a')
+            output_file.write('hid_count,train_mse,vs_mse,test_mse,vs_accuracy,test_accuracy\n')
 
-            data.shuffle()
+            learning_rates = [0.11, .12, .13, .14, .15, .16, .17, .18, .19]
+            hid_counts = [1, 2, 4, 8, 16, 32, 64]
 
-            train_size = int(train_percent * data.rows)
-            train_features = Matrix(data, 0, 0, train_size, data.cols-1)
-            train_labels = Matrix(data, 0, data.cols-1, train_size, 1)
+            test_count = 3
+            for hid_count in hid_counts:
+                train_mse_sum = 0
+                vs_mse_sum = 0
+                test_mse_sum = 0
+                vs_accuracy_sum = 0
+                test_accuracy_sum = 0
 
-            test_features = Matrix(data, train_size, 0, data.rows - train_size, data.cols-1)
-            test_labels = Matrix(data, train_size, data.cols-1, data.rows - train_size, 1)
+                for i in range(test_count):
+                    print('hid_count: ' + str(hid_count))
+                    data.shuffle()
 
-            start_time = time.time()
-            learner.train(train_features, train_labels)
-            elapsed_time = time.time() - start_time
-            print("Time to train (in seconds): {}".format(elapsed_time))
+                    train_size = int(train_percent * data.rows)
+                    train_features = Matrix(data, 0, 0, train_size, data.cols - 1)
+                    train_labels = Matrix(data, 0, data.cols - 1, train_size, 1)
 
-            train_accuracy = learner.measure_accuracy(train_features, train_labels)
-            print("Training set accuracy: {}".format(train_accuracy))
+                    test_features = Matrix(data, train_size, 0, data.rows - train_size, data.cols - 1)
+                    test_labels = Matrix(data, train_size, data.cols - 1, data.rows - train_size, 1)
 
-            confusion = Matrix()
-            test_accuracy = learner.measure_accuracy(test_features, test_labels, confusion)
-            print("Test set accuracy: {}".format(test_accuracy))
+                    learner.train(train_features, train_labels, 0.1, hid_count)
+                    vs_accuracy = learner.vs_accuracy
 
-            # if print_confusion_matrix:
-            #     print("\nConfusion matrix: (Row=target value, Col=predicted value)")
-            #     confusion.print()
-            #     print("")
+                    train_mse_sum += learner.train_mse
+                    vs_mse_sum += learner.vs_mse
 
-        # elif eval_method == "cross":
-        #
-        #     print("Calculating accuracy using cross-validation...")
-        #
-        #     folds = int(eval_parameter)
-        #     if folds <= 0:
-        #         raise Exception("Number of folds must be greater than 0")
-        #     print("Number of folds: {}".format(folds))
-        #     reps = 1
-        #     sum_accuracy = 0.0
-        #     elapsed_time = 0.0
-        #     for j in range(reps):
-        #         data.shuffle()
-        #         for i in range(folds):
-        #             begin = int(i * data.rows / folds)
-        #             end = int((i + 1) * data.rows / folds)
-        #
-        #             train_features = Matrix(data, 0, 0, begin, data.cols-1)
-        #             train_labels = Matrix(data, 0, data.cols-1, begin, 1)
-        #
-        #             test_features = Matrix(data, begin, 0, end - begin, data.cols-1)
-        #             test_labels = Matrix(data, begin, data.cols-1, end - begin, 1)
-        #
-        #             train_features.add(data, end, 0, data.cols - 1)
-        #             train_labels.add(data, end, data.cols - 1, 1)
-        #
-        #             start_time = time.time()
-        #             learner.train(train_features, train_labels)
-        #             elapsed_time += time.time() - start_time
-        #
-        #             accuracy = learner.measure_accuracy(test_features, test_labels)
-        #             sum_accuracy += accuracy
-        #             print("Rep={}, Fold={}, Accuracy={}".format(j, i, accuracy))
-        #
-        #     elapsed_time /= (reps * folds)
-        #     print("Average time to train (in seconds): {}".format(elapsed_time))
-        #     print("Mean accuracy={}".format(sum_accuracy / (reps * folds)))
-        #
-        # else:
-        #     raise Exception("Unrecognized evaluation method '{}'".format(eval_method))
+                    test_accuracy = learner.measure_accuracy(test_features, test_labels)
+                    test_mse = learner.net_sse() / (data.rows - train_size)
+
+                    test_mse_sum += test_mse
+                    vs_accuracy_sum += vs_accuracy
+                    test_accuracy_sum += test_accuracy
+
+                train_mse_avg = train_mse_sum / test_count
+                vs_mse_avg = vs_mse_sum / test_count
+                test_mse_avg = test_mse_sum / test_count
+                vs_accuracy_avg = vs_accuracy_sum / test_count
+                test_accuracy_avg = test_accuracy_sum / test_count
+
+                output_file.write(
+                    str(hid_count) + ',' + str(train_mse_avg) + ',' + str(vs_mse_avg) + ',' + str(test_mse_avg) + ',' + str(
+                        vs_accuracy_avg) + ',' + str(test_accuracy_avg) + '\n')
+            output_file.close()
 
     def parser(self):
         parser = argparse.ArgumentParser(description='Machine Learning System Manager')
 
-        parser.add_argument('-V', '--verbose', action='store_true', help='Print the confusion matrix and learner accuracy on individual class values')
+        parser.add_argument('-V', '--verbose', action='store_true',
+                            help='Print the confusion matrix and learner accuracy on individual class values')
         parser.add_argument('-N', '--normalize', action='store_true', help='Use normalized data')
-        parser.add_argument('-R', '--seed', help="Random seed") # will give a string
-        parser.add_argument('-L', required=True, choices=['baseline', 'perceptron', 'neuralnet', 'decisiontree', 'knn'], help='Learning Algorithm')
+        parser.add_argument('-R', '--seed', help="Random seed")  # will give a string
+        parser.add_argument('-L', required=True, choices=['baseline', 'perceptron', 'neuralnet', 'decisiontree', 'knn'],
+                            help='Learning Algorithm')
         parser.add_argument('-A', '--arff', metavar='filename', required=True, help='ARFF file')
-        parser.add_argument('-E', metavar=('METHOD', 'args'), required=True, nargs='+', help="Evaluation method (training | static <test_ARFF_file> | random <%%_for_training> | cross <num_folds>)")
+        parser.add_argument('-E', metavar=('METHOD', 'args'), required=True, nargs='+',
+                            help="Evaluation method (training | static <test_ARFF_file> | random <%%_for_training> | cross <num_folds>)")
 
         return parser
 

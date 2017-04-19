@@ -55,6 +55,7 @@ def gen_w_uid(node1, node2):
 class NeuralNetLearner(SupervisedLearner):
     def __init__(self):
         self.debug = False
+        self.write_to_file = False
 
         self.LR = 0.1
 
@@ -78,6 +79,11 @@ class NeuralNetLearner(SupervisedLearner):
         # init weightMap
         self.wm = dict()
         self.last_delta = dict()
+
+        self.train_mse = 0
+        self.vs_mse = 0
+        self.vs_accuracy = 0
+        self.best_epoch = 0
 
     def fill_input_layer(self, instance):
         for i in range(len(instance)):
@@ -155,12 +161,23 @@ class NeuralNetLearner(SupervisedLearner):
                 j_node.bias_weight += delta_w
             j_node.bias_last_delta = delta_w
 
-    def train(self, features, labels, lr=None):
+    def train(self, features, labels, lr=None, hid_count=None, momCof=None):
         if lr is not None:
             self.LR = lr
 
-        out_file = open('../{:%Y-%m-%d_%H-%M-%S}'.format(datetime.now()) + str('.csv'), 'a')
-        out_file.write('epoch,train_mse,vs_mse,vs_accuracy\n')
+        if hid_count is not None:
+            self.hid_count = hid_count
+
+        if momCof is not None:
+            self.momentumCo = momCof
+
+        # clear previous train data
+        self.wm = dict()
+        self.hid_lays = []
+
+        if self.write_to_file:
+            out_file = open('{:%Y-%m-%d_%H-%M-%S}'.format(datetime.now()) + str('.csv'), 'a')
+            out_file.write('epoch,train_mse,vs_mse,vs_accuracy\n')
 
         # Create Nodes
         # fill the input layer with the first entry in the instances, this will be overwritten
@@ -223,8 +240,7 @@ class NeuralNetLearner(SupervisedLearner):
         best_weights = []
 
         while learning:
-        # while epoch_count < 200:
-            print('{:<4d}'.format(epoch_count), end=' - ', flush=True)
+            # print('{:<4d}'.format(epoch_count), end=' - ', flush=True)
 
             # ******************************************************************************************
             # Shuffle the Training Set
@@ -240,8 +256,10 @@ class NeuralNetLearner(SupervisedLearner):
                 self.propagate(train_set[instance_index], train_set_targets[instance_index])
                 sse += self.net_sse()
             train_mse = sse / len(train_set)
+            self.train_mse = train_mse
 
-            out_file.write(str(epoch_count) + ',' + str(train_mse) + str(','))
+            if self.write_to_file:
+                out_file.write(str(epoch_count) + ',' + str(train_mse) + str(','))
 
             # ******************************************************************************************
             # Validation Step
@@ -260,25 +278,25 @@ class NeuralNetLearner(SupervisedLearner):
 
             vs_mse = vs_sse / len(valid_set)
             vs_accuracy = correct / len(valid_set)
+            self.vs_accuracy = vs_accuracy
 
             # vs mse termination
-            print(
-                '{:.10f}'.format(train_mse) + ' - ' + '{:.10f}'.format(vs_mse) + ' - ' + '{:.10f}'.format(vs_accuracy))
-            if epoch_count > 10:
-                if vs_mse < best_vs_mse:
-                    print('BEST FOUND')
-                    best_vs_mse = vs_mse
-                    best_at_epoch = epoch_count
-                    epochs_without_improvement = 0
+            # print('{:.10f}'.format(train_mse) + ' - ' + '{:.10f}'.format(vs_mse) + ' - ' + '{:.10f}'.format(vs_accuracy))
+            if vs_mse < best_vs_mse:
+                best_vs_mse = vs_mse
+                self.vs_mse = best_vs_mse
+                best_at_epoch = epoch_count
+                epochs_without_improvement = 0
 
-                    # assign the "best" hidden layer set
-                    best_hl = copy.deepcopy(self.hid_lays)
-                    best_out = copy.deepcopy(self.out_lay)
-                    best_weights = copy.deepcopy(self.wm)
-                else:
-                    epochs_without_improvement += 1
+                # assign the "best" hidden layer set
+                best_hl = copy.deepcopy(self.hid_lays)
+                best_out = copy.deepcopy(self.out_lay)
+                best_weights = copy.deepcopy(self.wm)
+            else:
+                epochs_without_improvement += 1
 
-            out_file.write(str(vs_mse) + ',' + str(vs_accuracy) + '\n')
+            if self.write_to_file:
+                out_file.write(str(vs_mse) + ',' + str(vs_accuracy) + '\n')
             epoch_count += 1
 
             if epochs_without_improvement > 5:
@@ -288,8 +306,9 @@ class NeuralNetLearner(SupervisedLearner):
         self.out_lay = best_out
         self.wm = best_weights
 
-        out_file.close()
-        print('Best Epoch at: ' + str(best_at_epoch))
+        if self.write_to_file:
+            out_file.close()
+        self.best_epoch = best_at_epoch
 
     def calc_output(self, in_layer, layer):
         # calculate net values
@@ -365,3 +384,63 @@ class NeuralNetLearner(SupervisedLearner):
         for node in self.out_lay:
             error_sum += math.pow(node.error, 2)
         return error_sum
+
+    def measure_accuracy(self, features, labels, confusion=None):
+        """
+        The model must be trained before you call this method. If the label is nominal,
+        it returns the predictive accuracy. If the label is continuous, it returns
+        the root mean squared error (RMSE). If confusion is non-NULL, and the
+        output label is nominal, then confusion will hold stats for a confusion matrix.
+        :type features: Matrix
+        :type labels: Matrix
+        :type confusion: Matrix
+        :rtype float
+        """
+
+        if features.rows != labels.rows:
+            raise Exception("Expected the features and labels to have the same number of rows")
+        if labels.cols != 1:
+            raise Exception("Sorry, this method currently only supports one-dimensional labels")
+        if features.rows == 0:
+            raise Exception("Expected at least one row")
+
+        label_values_count = labels.value_count(0)
+        if label_values_count == 0:
+            # print('CONTINUOUS ACCURACY MEASURE')
+            # label is continuous
+            pred = [0]
+            sse = 0.0
+            for i in range(features.rows):
+                feat = features.row(i)
+                targ = labels.row(i)
+                pred[0] = 0.0  # make sure the prediction is not biased by a previous prediction
+                # print("Target: " + str(targ[0]))
+                self.predict(feat, pred)
+                delta = targ[0] - pred[0]
+                sse += delta ** 2
+            return math.sqrt(sse / features.rows)
+
+        else:
+            # print('NOMINCAL ACCURACY MEASURE')
+            # label is nominal, so measure predictive accuracy
+            if confusion:
+                confusion.set_size(label_values_count, label_values_count)
+                confusion.attr_names = [labels.attr_value(0, i) for i in range(label_values_count)]
+
+            correct_count = 0
+            prediction = []
+            for i in range(features.rows):
+                feat = features.row(i)
+                targ = int(labels.get(i, 0))
+                if targ >= label_values_count:
+                    raise Exception("The label is out of range")
+                self.vs_predict(feat, prediction, [targ])
+
+                pred = int(prediction[0])
+                if confusion:
+                    confusion.set(targ, pred, confusion.get(targ, pred) + 1)
+
+                if pred == targ:
+                    correct_count += 1
+
+            return correct_count / features.rows
