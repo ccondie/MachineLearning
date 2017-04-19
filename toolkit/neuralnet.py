@@ -17,6 +17,7 @@ class Node(object):
         self.net = 0
         self.out = out
         self.sigma = 0
+        self.error = 0
         self.bias_weight = 1
         self.bias_last_delta = 0
         # used to specify target for an output node using categorical data
@@ -47,17 +48,6 @@ def gen_input_layer(size):
     return layer
 
 
-def update_sigma_out(j, target):
-    for j_node in j:
-        if target == j_node.target:
-            node_target = 1
-        else:
-            node_target = 0
-
-        # calculate the output node's new sigma
-        j_node.sigma = (node_target - j_node.out) * j_node.out * (1 - j_node.out)
-
-
 def gen_w_uid(node1, node2):
     return ''.join([str(node1.uid), '-', str(node2.uid)])
 
@@ -66,7 +56,7 @@ class NeuralNetLearner(SupervisedLearner):
     def __init__(self):
         self.debug = False
 
-        self.LR = 0.3
+        self.LR = 0.1
 
         # number of nodes in the hidden layer
         self.hid_count = 20
@@ -93,13 +83,26 @@ class NeuralNetLearner(SupervisedLearner):
         for i in range(len(instance)):
             self.in_lay[i].out = instance[i]
 
+    def calculate_target_error(self, target):
+        for out_node in self.out_lay:
+            if target == out_node.target:
+                node_target = 1
+            else:
+                node_target = 0
+            out_node.error = node_target - out_node.out
+
+    def calculate_output_sigma(self):
+        for out_node in self.out_lay:
+            out_node.sigma = out_node.error * out_node.out * (1 - out_node.out)
+
     # calculate the error on the output layer given an expected target
     # Calculates the new sigma values for output layer j and updates the weights between i and j
     # param i: list of nodes in the preceding node layer
     # param j: list of nodes in the layer to update sigma
     def update_weights_out(self, i, j, target):
         # update the sigma values in the forward layer
-        update_sigma_out(j, target)
+        self.calculate_target_error(target)
+        self.calculate_output_sigma()
 
         for j_node in j:
             # use that sigma to update the weights feeding into this output node
@@ -156,7 +159,7 @@ class NeuralNetLearner(SupervisedLearner):
         if lr is not None:
             self.LR = lr
 
-        out_file = open('{:%Y-%m-%d_%H-%M-%S}'.format(datetime.now()) + str('.csv'), 'a')
+        out_file = open('../{:%Y-%m-%d_%H-%M-%S}'.format(datetime.now()) + str('.csv'), 'a')
         out_file.write('epoch,train_mse,vs_mse,vs_accuracy\n')
 
         # Create Nodes
@@ -211,24 +214,17 @@ class NeuralNetLearner(SupervisedLearner):
         epoch_count = 0
         epochs_without_improvement = 0
 
-        best_vs_accuracy = 0
-        last_vs_accuracy = 0
-
         best_vs_mse = sys.maxsize
-        last_vs_mse = sys.maxsize
-
-        best_mse = sys.maxsize
-        last_mse = sys.maxsize
 
         best_at_epoch = 0
+
         best_hl = []
         best_out = []
         best_weights = []
 
-        # while learning:
-        while epoch_count < 200:
-
-            print(epoch_count, end=' - ', flush=True)
+        while learning:
+        # while epoch_count < 200:
+            print('{:<4d}'.format(epoch_count), end=' - ', flush=True)
 
             # ******************************************************************************************
             # Shuffle the Training Set
@@ -242,9 +238,8 @@ class NeuralNetLearner(SupervisedLearner):
             sse = 0
             for instance_index in train_order:
                 self.propagate(train_set[instance_index], train_set_targets[instance_index])
-                sse += self.net_mse()
+                sse += self.net_sse()
             train_mse = sse / len(train_set)
-            # train_mse = self.net_mse()
 
             out_file.write(str(epoch_count) + ',' + str(train_mse) + str(','))
 
@@ -252,31 +247,30 @@ class NeuralNetLearner(SupervisedLearner):
             # Validation Step
             # ******************************************************************************************
             correct = 0
-            vs_count = 0
             vs_sse = 0
 
             # test the validation instances
             for instance_index in range(len(valid_set)):
-                vs_count += 1
                 instance_prediction = []
                 self.vs_predict(valid_set[instance_index], instance_prediction, valid_set_targets[instance_index])
-                # vs_sse += self.net_mse()
+                vs_sse += self.net_sse()
 
                 if instance_prediction == valid_set_targets[instance_index]:
                     correct += 1
 
-            # vs_mse = vs_sse / len(valid_set)
-            vs_mse = self.net_mse()
-            vs_accuracy = correct / vs_count
+            vs_mse = vs_sse / len(valid_set)
+            vs_accuracy = correct / len(valid_set)
 
             # vs mse termination
-            print(str(train_mse) + ' - ' + str(vs_mse) + ' - ' + str(vs_accuracy))
+            print(
+                '{:.10f}'.format(train_mse) + ' - ' + '{:.10f}'.format(vs_mse) + ' - ' + '{:.10f}'.format(vs_accuracy))
             if epoch_count > 10:
                 if vs_mse < best_vs_mse:
                     print('BEST FOUND')
                     best_vs_mse = vs_mse
                     best_at_epoch = epoch_count
                     epochs_without_improvement = 0
+
                     # assign the "best" hidden layer set
                     best_hl = copy.deepcopy(self.hid_lays)
                     best_out = copy.deepcopy(self.out_lay)
@@ -284,42 +278,15 @@ class NeuralNetLearner(SupervisedLearner):
                 else:
                     epochs_without_improvement += 1
 
-            # # mse termination
-            # print(str(train_mse) +' - ' + str(vs_mse) + ' - ' + str(vs_accuracy))
-            # if train_mse < last_mse:
-            #     if train_mse < best_mse:
-            #         best_mse = train_mse
-            #         best_at_epoch = epoch_count
-            #         epochs_without_improvement = 0
-            #         # assign the "best" hidden layer set
-            #         best_hl = copy.deepcopy(self.hid_lays)
-            #         best_out = copy.deepcopy(self.out_lay)
-            # else:
-            #     epochs_without_improvement += 1
-            #
-            # last_mse = train_mse
-
-            # # vs accuracy termination
-            # if vs_accuracy > last_vs_accuracy:
-            #     if vs_accuracy > best_vs_accuracy:
-            #         best_vs_accuracy = vs_accuracy
-            #         epochs_without_improvement = 0
-            #         # assign the "best" hidden layer set
-            #         best_hl = copy.deepcopy(self.hid_lays)
-            #         best_out = copy.deepcopy(self.out_lay)
-            # else:
-            #     epochs_without_improvement += 1
-            # last_vs_accuracy = vs_accuracy
-
             out_file.write(str(vs_mse) + ',' + str(vs_accuracy) + '\n')
             epoch_count += 1
 
-            if epochs_without_improvement > 10:
+            if epochs_without_improvement > 5:
                 learning = False
 
-        # self.hid_lays = best_hl
-        # self.out_lay = best_out
-        # self.wm = best_weights
+        self.hid_lays = best_hl
+        self.out_lay = best_out
+        self.wm = best_weights
 
         out_file.close()
         print('Best Epoch at: ' + str(best_at_epoch))
@@ -377,7 +344,7 @@ class NeuralNetLearner(SupervisedLearner):
 
         self.calc_output(self.in_lay, self.hid_lays[0])
         self.calc_output(self.hid_lays[-1], self.out_lay)
-        update_sigma_out(self.out_lay, expected)
+        self.calculate_target_error(expected[0])
 
         prediction = -1
         highest = 0
@@ -392,11 +359,9 @@ class NeuralNetLearner(SupervisedLearner):
         else:
             labels[0] = prediction
 
-    def net_mse(self):
-        # calculates the mse of the neural net as it is now
+    def net_sse(self):
+        # calculates the sse of the neural net as it is now
         error_sum = 0
-        node_tally = 0
         for node in self.out_lay:
-            error_sum += node.sigma ** 2
-            node_tally += 1
-        return error_sum / node_tally
+            error_sum += math.pow(node.error, 2)
+        return error_sum
